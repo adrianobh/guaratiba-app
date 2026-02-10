@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Autorização</title>
+    <style>
+        :root {
+            --primary: #25D366; /* WhatsApp Green */
+            --dark: #128C7E;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --text: #333333;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            padding-bottom: 80px; /* Space for fixed button */
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h2 { margin-top: 0; color: var(--dark); font-size: 1.2rem; border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem;}
+        input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-sizing: border-box; /* Fix padding issue */
+            font-size: 1rem;
+        }
+        .row { display: flex; gap: 10px; }
+        .col { flex: 1; }
+        
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-add { background-color: #007bff; color: white; width: 100%; margin-bottom: 10px;}
+        .btn-remove { background-color: #dc3545; color: white; padding: 8px 12px; font-size: 0.8rem;}
+        .btn-whatsapp {
+            background-color: var(--primary);
+            color: white;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 580px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+        .btn-clear { background-color: #6c757d; color: white; margin-top: 10px; width: 100%;}
+
+        .list-item {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #e9ecef;
+        }
+        .list-item-content { flex: 1; }
+        .list-item strong { display: block; }
+        .list-item small { color: #666; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h2>📅 Dados da Viagem</h2>
+        <div class="row">
+            <div class="col">
+                <label>Chegada</label>
+                <input type="date" id="dateArrival">
+            </div>
+            <div class="col">
+                <label>Check-in</label>
+                <input type="time" id="timeCheckin">
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>👥 Hóspedes (<span id="guestCount">0</span>)</h2>
+        <div id="guestList"></div>
+        
+        <div class="row">
+            <div class="col"><input type="text" id="guestName" placeholder="Nome Completo"></div>
+            <div class="col" style="flex: 0.6;"><input type="number" id="guestRG" placeholder="RG (só números)"></div>
+        </div>
+        <button class="btn-add" onclick="addGuest()">+ Adicionar Hóspede</button>
+    </div>
+
+    <div class="card">
+        <h2>🚗 Veículos</h2>
+        <div id="vehicleList"></div>
+        
+        <div class="row">
+            <div class="col"><input type="text" id="vehicleModel" placeholder="Modelo (ex: Honda City)"></div>
+            <div class="col" style="flex: 0.6;"><input type="text" id="vehiclePlate" placeholder="Placa"></div>
+        </div>
+        <button class="btn-add" onclick="addVehicle()">+ Adicionar Veículo</button>
+    </div>
+
+    <button class="btn-clear" onclick="clearData()">🗑️ Limpar Tudo</button>
+    <div style="height: 60px;"></div> </div>
+
+<button class="btn-whatsapp" onclick="sendWhatsApp()">📲 Gerar e Enviar no WhatsApp</button>
+
+<script>
+    // --- ESTADO INICIAL ---
+    let guests = JSON.parse(localStorage.getItem('guests')) || [];
+    let vehicles = JSON.parse(localStorage.getItem('vehicles')) || [];
+    
+    // Carregar datas salvas ou usar hoje
+    document.getElementById('dateArrival').value = localStorage.getItem('dateArrival') || new Date().toISOString().split('T')[0];
+    document.getElementById('timeCheckin').value = localStorage.getItem('timeCheckin') || "12:00";
+
+    // --- FUNÇÕES DE RENDERIZAÇÃO ---
+    function render() {
+        const guestListEl = document.getElementById('guestList');
+        const vehicleListEl = document.getElementById('vehicleList');
+        
+        // Render Hóspedes
+        guestListEl.innerHTML = '';
+        guests.forEach((g, index) => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div class="list-item-content">
+                    <strong>${index + 1}. ${g.name}</strong>
+                    <small>RG: ${formatRG(g.rg)}</small>
+                </div>
+                <button class="btn-remove" onclick="removeGuest(${index})">X</button>
+            `;
+            guestListEl.appendChild(div);
+        });
+        document.getElementById('guestCount').innerText = guests.length;
+
+        // Render Veículos
+        vehicleListEl.innerHTML = '';
+        vehicles.forEach((v, index) => {
+            const div = document.createElement('div');
+            div.className = 'list-item';
+            div.innerHTML = `
+                <div class="list-item-content">
+                    <strong>${v.model}</strong>
+                    <small>Placa: ${v.plate.toUpperCase()}</small>
+                </div>
+                <button class="btn-remove" onclick="removeVehicle(${index})">X</button>
+            `;
+            vehicleListEl.appendChild(div);
+        });
+
+        // Salvar tudo no LocalStorage
+        saveData();
+    }
+
+    // --- FUNÇÕES DE LÓGICA ---
+    function addGuest() {
+        const name = document.getElementById('guestName').value;
+        const rg = document.getElementById('guestRG').value;
+        if(name && rg) {
+            guests.push({name, rg});
+            document.getElementById('guestName').value = '';
+            document.getElementById('guestRG').value = '';
+            document.getElementById('guestName').focus();
+            render();
+        } else {
+            alert("Preencha Nome e RG");
+        }
+    }
+
+    function removeGuest(index) {
+        guests.splice(index, 1);
+        render();
+    }
+
+    function addVehicle() {
+        const model = document.getElementById('vehicleModel').value;
+        const plate = document.getElementById('vehiclePlate').value;
+        if(model && plate) {
+            vehicles.push({model, plate});
+            document.getElementById('vehicleModel').value = '';
+            document.getElementById('vehiclePlate').value = '';
+            render();
+        } else {
+            alert("Preencha Modelo e Placa");
+        }
+    }
+
+    function removeVehicle(index) {
+        vehicles.splice(index, 1);
+        render();
+    }
+
+    function saveData() {
+        localStorage.setItem('guests', JSON.stringify(guests));
+        localStorage.setItem('vehicles', JSON.stringify(vehicles));
+        localStorage.setItem('dateArrival', document.getElementById('dateArrival').value);
+        localStorage.setItem('timeCheckin', document.getElementById('timeCheckin').value);
+    }
+
+    function clearData() {
+        if(confirm("Tem certeza que deseja limpar tudo?")) {
+            guests = [];
+            vehicles = [];
+            localStorage.clear();
+            render();
+        }
+    }
+
+    function formatRG(rg) {
+        // Formatação simples visual
+        return rg; 
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return "";
+        const [year, month, day] = dateString.split('-');
+        return `${day}/${month}/${year}`;
+    }
+
+    // --- GERADOR DE TEXTO ---
+    function sendWhatsApp() {
+        if (guests.length === 0) {
+            alert("Adicione pelo menos um hóspede!");
+            return;
+        }
+
+        const dateVal = document.getElementById('dateArrival').value;
+        const timeVal = document.getElementById('timeCheckin').value;
+        
+        let text = `📝 AUTORIZAÇÃO DE HÓSPEDES E VISITANTES\n`;
+        text += `🔸 ANFITRIÃO\n👤 Nome: Marisa e Beto\n🏠 Quadra: 04\n📍 Lote: 12\n---\n`;
+        
+        text += `🔹 HÓSPEDES\n📝 Relação de hóspedes (nome completo e RG):\n`;
+        guests.forEach((g, i) => {
+            text += `${i + 1}. ${g.name} – RG ${formatRG(g.rg)}\n`;
+        });
+
+        text += `🚗 Veículos:\n`;
+        if (vehicles.length > 0) {
+            vehicles.forEach(v => {
+                text += `* ${v.model}: Placa ${v.plate.toUpperCase()}\n`;
+            });
+        } else {
+            text += `(Sem veículos)\n`;
+        }
+
+        text += `👥 Quantidade de pessoas: ${guests.length.toString().padStart(2, '0')}\n`;
+        text += `📅 Dia de chegada: ${formatDate(dateVal)}\n`;
+        text += `⏰ Check-in: ${timeVal}`;
+
+        // Codificar e abrir
+        const encodedText = encodeURIComponent(text);
+        window.open(`https://wa.me/?text=${encodedText}`, '_blank');
+    }
+
+    // Inicializar
+    render();
+</script>
+
+</body>
+</html>
